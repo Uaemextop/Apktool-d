@@ -64,28 +64,36 @@ public class ApkAnalyzer {
             printApkContents(extFile, out);
 
             // Try aapt2 dump for detailed info.
+            Aapt2Operations aapt2;
             try {
-                Aapt2Operations aapt2 = new Aapt2Operations(mConfig);
-                String badging = aapt2.dumpBadging(apkFile);
-                if (badging != null && !badging.isEmpty()) {
-                    out.println("=== Badging Info ===");
-                    out.println(badging);
-                    out.println();
-                }
+                aapt2 = new Aapt2Operations(mConfig);
             } catch (AndrolibException ex) {
-                Log.d(TAG, "Could not dump badging: " + ex.getMessage());
+                Log.d(TAG, "Could not initialize aapt2: " + ex.getMessage());
+                aapt2 = null;
             }
 
-            try {
-                Aapt2Operations aapt2 = new Aapt2Operations(mConfig);
-                String permissions = aapt2.dumpPermissions(apkFile);
-                if (permissions != null && !permissions.isEmpty()) {
-                    out.println("=== Permissions ===");
-                    out.println(permissions);
-                    out.println();
+            if (aapt2 != null) {
+                try {
+                    String badging = aapt2.dumpBadging(apkFile);
+                    if (badging != null && !badging.isEmpty()) {
+                        out.println("=== Badging Info ===");
+                        out.println(badging);
+                        out.println();
+                    }
+                } catch (AndrolibException ex) {
+                    Log.d(TAG, "Could not dump badging: " + ex.getMessage());
                 }
-            } catch (AndrolibException ex) {
-                Log.d(TAG, "Could not dump permissions: " + ex.getMessage());
+
+                try {
+                    String permissions = aapt2.dumpPermissions(apkFile);
+                    if (permissions != null && !permissions.isEmpty()) {
+                        out.println("=== Permissions ===");
+                        out.println(permissions);
+                        out.println();
+                    }
+                } catch (AndrolibException ex) {
+                    Log.d(TAG, "Could not dump permissions: " + ex.getMessage());
+                }
             }
         } finally {
             try {
@@ -141,7 +149,7 @@ public class ApkAnalyzer {
             }
         }
         if (smaliDirCount > 0) {
-            out.println("[OK] " + smaliDirCount + " smali director" + (smaliDirCount == 1 ? "y" : "ies") + " found");
+            out.println("[OK] " + smaliDirCount + " smali " + (smaliDirCount == 1 ? "directory" : "directories") + " found");
         } else {
             // Check for raw dex files instead.
             boolean hasDex = false;
@@ -165,7 +173,7 @@ public class ApkAnalyzer {
         if (resDir.isDirectory()) {
             File[] resDirs = resDir.listFiles();
             int resCount = resDirs != null ? resDirs.length : 0;
-            out.println("[OK] res/ directory found with " + resCount + " sub-director" + (resCount == 1 ? "y" : "ies"));
+            out.println("[OK] res/ directory found with " + resCount + " " + (resCount == 1 ? "sub-directory" : "sub-directories"));
         } else {
             File arscFile = new File(projectDir, "resources.arsc");
             if (arscFile.isFile()) {
