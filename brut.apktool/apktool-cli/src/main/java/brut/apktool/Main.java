@@ -25,6 +25,7 @@ import brut.androlib.exceptions.InFileNotFoundException;
 import brut.androlib.exceptions.OutDirExistsException;
 import brut.androlib.res.AaptManager;
 import brut.androlib.res.Framework;
+import brut.apktool.commands.*;
 import brut.util.OSDetection;
 import org.apache.commons.cli.*;
 
@@ -228,6 +229,17 @@ public class Main {
     private static Options loadedOptions = null;
     private static boolean advancedMode = false;
 
+    // Command registry for new commands.
+    private static final CommandRegistry commandRegistry = new CommandRegistry();
+
+    static {
+        commandRegistry.register(new InfoCommand());
+        commandRegistry.register(new DumpResourcesCommand());
+        commandRegistry.register(new OptimizeCommand());
+        commandRegistry.register(new ValidateCommand());
+        commandRegistry.register(new ConvertCommand());
+    }
+
     private static void loadOptions(Options options, boolean advanced) {
         loadedOptions = options;
         advancedMode = advanced;
@@ -352,10 +364,16 @@ public class Main {
                 printVersion();
                 break;
             default:
-                System.err.println("Unrecognized command: " + cmdName);
-                loadOptions(null, false);
-                printUsage();
-                System.exit(1);
+                // Try registered commands before reporting an error.
+                Command command = commandRegistry.getCommand(cmdName);
+                if (command != null) {
+                    command.execute(cmdArgs, config);
+                } else {
+                    System.err.println("Unrecognized command: " + cmdName);
+                    loadOptions(null, false);
+                    printUsage();
+                    System.exit(1);
+                }
         }
     }
 
@@ -773,6 +791,17 @@ public class Main {
             writer.println();
             writer.println("apktool v|version");
             writer.println();
+        }
+
+        // Print registered commands.
+        if (loadedOptions == null || advancedMode) {
+            for (Command command : commandRegistry.getCommands()) {
+                writer.println(command.getUsage());
+                Options cmdOptions = new Options();
+                command.addOptions(cmdOptions, advancedMode);
+                printOptions(writer, formatter, cmdOptions);
+                writer.println();
+            }
         }
 
         // Print footer.
