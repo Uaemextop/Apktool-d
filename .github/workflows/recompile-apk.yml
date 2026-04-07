@@ -56,6 +56,11 @@ jobs:
     runs-on: ubuntu-latest
     name: Recompile decompiled APK/JAR
     steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/ehcosmart.jks
+          sparse-checkout-cone-mode: false
+
       - uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
@@ -194,6 +199,48 @@ jobs:
           echo "Recompilation complete."
           ls -la "$OUTPUT_DIR"
 
+      - name: Zipalign APK
+        if: env.SOURCE_TYPE == 'apk'
+        run: |
+          ANDROID_HOME=/tmp/android-sdk
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          # Install build-tools to get zipalign
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "build-tools;36.0.0"
+          ZIPALIGN="$ANDROID_HOME/build-tools/36.0.0/zipalign"
+
+          INPUT_APK="${{ env.OUTPUT_DIR }}/${{ env.REPO_NAME }}.apk"
+          ALIGNED_APK="${{ env.OUTPUT_DIR }}/${{ env.REPO_NAME }}-aligned.apk"
+
+          echo "Running zipalign on $INPUT_APK"
+          "$ZIPALIGN" -f -v 4 "$INPUT_APK" "$ALIGNED_APK"
+
+          # Replace original with aligned version
+          mv "$ALIGNED_APK" "$INPUT_APK"
+          echo "Zipalign complete."
+          ls -la "$INPUT_APK"
+
+      - name: Sign APK with ehcosmart key
+        if: env.SOURCE_TYPE == 'apk'
+        run: |
+          ANDROID_HOME=/tmp/android-sdk
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+
+          INPUT_APK="${{ env.OUTPUT_DIR }}/${{ env.REPO_NAME }}.apk"
+          KEYSTORE="${{ github.workspace }}/.github/ehcosmart.jks"
+
+          echo "Signing APK with ehcosmart keystore"
+          "$APKSIGNER" sign \
+            --ks "$KEYSTORE" \
+            --ks-key-alias ehcosmart \
+            --ks-pass pass:ehcosmart \
+            --key-pass pass:ehcosmart \
+            "$INPUT_APK"
+
+          echo "Verifying signature..."
+          "$APKSIGNER" verify --verbose "$INPUT_APK"
+          echo "APK signed successfully."
+
       - name: Recompile JAR
         if: env.SOURCE_TYPE == 'jar'
         run: |
@@ -224,4 +271,8 @@ jobs:
           fi
           echo "- **Source Type:** ${{ env.SOURCE_TYPE }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Output:** ${{ env.REPO_NAME }}.${{ env.SOURCE_TYPE }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ env.SOURCE_TYPE }}" = "apk" ]; then
+            echo "- **Zipaligned:** ✅ Yes" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Signed:** ✅ ehcosmart (O=ehcosmart)" >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "- **Artifact:** recompiled-${{ env.SOURCE_TYPE }}" >> "$GITHUB_STEP_SUMMARY"
